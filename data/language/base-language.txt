@@ -1,0 +1,11 @@
+object_CrematoriumFurnace                   Crematorium
+buildtoolbar_popup_obj_CrematoriumFurnace   Zone the tiles under and just in front of it as a Morgue. Guards then carry the dead straight into the furnace, from wherever they fell and from other morgue slabs nearby, and it cremates them one at a time. No hearse needed.
+tooltip_CrematoriumFurnace_Idle             Cremated so far: *A
+tooltip_CrematoriumFurnace_Burning          Cremating\nCremated so far: *A
+tooltip_CrematoriumFurnace_CoolDown         Cooling down\nCremated so far: *A
+object_VaporizerPod                         Vaporizer
+buildtoolbar_popup_obj_VaporizerPod         Zone the tiles under and just in front of it as a Morgue. Guards then carry the dead straight into the pod, from wherever they fell and from other morgue slabs nearby, and it vaporizes them one at a time, leaving nothing behind.
+tooltip_VaporizerPod_Idle                   Vaporized so far: *A
+tooltip_VaporizerPod_Burning                Vaporizing\nVaporized so far: *A
+tooltip_VaporizerPod_CoolDown               Recharging\nVaporized so far: *A
+buildtoolbar_popup_room_morgue              Dead bodies are stored here on morgue slabs until a hearse collects them. A Morgue may be outdoors, so a Crematorium or Vaporizer can stand in one.

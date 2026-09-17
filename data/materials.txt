@@ -1,0 +1,116 @@
+BEGIN Object
+    Name                 CrematoriumFurnace
+    Width                3
+    Height               2
+    ConstructionTime     5.00000
+    MoveSpeedFactor      0.500000
+    Toughness            200.0000
+    Price                -1500
+    NumSlots             8
+    RenderDepth          2
+    Group                StaticObject
+    BlockedBy            Wall
+    BlockedBy            StaticObject
+    BlockedBy            UtilityStation
+    MadeOf               Composite
+    Properties           StaticObject
+    Properties           Scripted
+    NumSprites           2
+    BEGIN ToolbarSprite  x 6 y 0 w 2 h 2 END
+    BEGIN Sprite         x 0 y 0 w 3 h 2 RotateType 0 TopAligned false
+        BEGIN Marker     x 1.5 y 1.00 orientation.x 0 orientation.y 1 Index 0 END
+        BEGIN Marker     x 1.5 y 1.05 orientation.x 0 orientation.y 1 Index 1 END
+        BEGIN Marker     x 1.5 y 1.10 orientation.x 0 orientation.y 1 Index 2 END
+        BEGIN Marker     x 1.5 y 1.15 orientation.x 0 orientation.y 1 Index 3 END
+        BEGIN Marker     x 1.5 y 1.20 orientation.x 0 orientation.y 1 Index 4 END
+        BEGIN Marker     x 1.5 y 1.25 orientation.x 0 orientation.y 1 Index 5 END
+        BEGIN Marker     x 1.5 y 1.30 orientation.x 0 orientation.y 1 Index 6 END
+        BEGIN Marker     x 1.5 y 1.35 orientation.x 0 orientation.y 1 Index 7 END
+    END
+    BEGIN Sprite         x 3 y 0 w 3 h 2 RotateType 0 TopAligned false
+        BEGIN Marker     x 1.5 y 1.00 orientation.x 0 orientation.y 1 Index 0 END
+        BEGIN Marker     x 1.5 y 1.05 orientation.x 0 orientation.y 1 Index 1 END
+        BEGIN Marker     x 1.5 y 1.10 orientation.x 0 orientation.y 1 Index 2 END
+        BEGIN Marker     x 1.5 y 1.15 orientation.x 0 orientation.y 1 Index 3 END
+        BEGIN Marker     x 1.5 y 1.20 orientation.x 0 orientation.y 1 Index 4 END
+        BEGIN Marker     x 1.5 y 1.25 orientation.x 0 orientation.y 1 Index 5 END
+        BEGIN Marker     x 1.5 y 1.30 orientation.x 0 orientation.y 1 Index 6 END
+        BEGIN Marker     x 1.5 y 1.35 orientation.x 0 orientation.y 1 Index 7 END
+    END
+END
+
+BEGIN Object
+    Name                 VaporizerPod
+    Width                3
+    Height               2
+    ConstructionTime     5.00000
+    MoveSpeedFactor      0.500000
+    Toughness            200.0000
+    Price                -3000
+    NumSlots             8
+    RenderDepth          2
+    Group                StaticObject
+    BlockedBy            Wall
+    BlockedBy            StaticObject
+    BlockedBy            UtilityStation
+    MadeOf               Composite
+    Properties           StaticObject
+    Properties           Scripted
+    NumSprites           2
+    BEGIN ToolbarSprite  x 6 y 2 w 2 h 2 END
+    BEGIN Sprite         x 0 y 2 w 3 h 2 RotateType 0 TopAligned false
+        BEGIN Marker     x 1.5 y 1.00 orientation.x 0 orientation.y 1 Index 0 END
+        BEGIN Marker     x 1.5 y 1.05 orientation.x 0 orientation.y 1 Index 1 END
+        BEGIN Marker     x 1.5 y 1.10 orientation.x 0 orientation.y 1 Index 2 END
+        BEGIN Marker     x 1.5 y 1.15 orientation.x 0 orientation.y 1 Index 3 END
+        BEGIN Marker     x 1.5 y 1.20 orientation.x 0 orientation.y 1 Index 4 END
+        BEGIN Marker     x 1.5 y 1.25 orientation.x 0 orientation.y 1 Index 5 END
+        BEGIN Marker     x 1.5 y 1.30 orientation.x 0 orientation.y 1 Index 6 END
+        BEGIN Marker     x 1.5 y 1.35 orientation.x 0 orientation.y 1 Index 7 END
+    END
+    BEGIN Sprite         x 3 y 2 w 3 h 2 RotateType 0 TopAligned false
+        BEGIN Marker     x 1.5 y 1.00 orientation.x 0 orientation.y 1 Index 0 END
+        BEGIN Marker     x 1.5 y 1.05 orientation.x 0 orientation.y 1 Index 1 END
+        BEGIN Marker     x 1.5 y 1.10 orientation.x 0 orientation.y 1 Index 2 END
+        BEGIN Marker     x 1.5 y 1.15 orientation.x 0 orientation.y 1 Index 3 END
+        BEGIN Marker     x 1.5 y 1.20 orientation.x 0 orientation.y 1 Index 4 END
+        BEGIN Marker     x 1.5 y 1.25 orientation.x 0 orientation.y 1 Index 5 END
+        BEGIN Marker     x 1.5 y 1.30 orientation.x 0 orientation.y 1 Index 6 END
+        BEGIN Marker     x 1.5 y 1.35 orientation.x 0 orientation.y 1 Index 7 END
+    END
+END
+
+BEGIN Object     
+    Name                 MorgueSlab  
+    Width                1  
+    Height               2  
+    GroundBaseOveride	 1
+    ConstructionTime     3.00000  
+    MoveSpeedFactor      0.500000  
+    Toughness            30.0000  
+    Price                -100  
+    Filter		 Work
+    NumSlots             1  
+    RenderDepth          0
+    AttachToWall         true  
+    Group                StaticObject  
+    BlockedBy            Wall  
+    BlockedBy            StaticObject  
+    BlockedBy            UtilityStation
+    Sprite               MorgueSlab    
+    ToolbarSprite        MorgueSlabToolbar
+    MadeOf               Composite
+    Properties           StaticObject
+    Properties           Scripted
+    Properties           RoomSpecific 
+    Research             Health
+END
+
+BEGIN Room       
+    Name                 Morgue  
+    Research             Health  
+    BEGIN Requirement Type Object  Id MorgueSlab  END
+    BEGIN Contraband    Id      Scissors         END
+    BEGIN Contraband    Id      Knife END
+
+END
