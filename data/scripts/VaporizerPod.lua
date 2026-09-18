@@ -59,8 +59,8 @@ local ENTITY_TYPES = {
 }
 
 local clock      = 0
-local checkTimer = 0
-local sweepTimer = 0
+local checkTimer = math.random() * CHECK_INTERVAL   -- a random start, so machines do not all work on one tick
+local sweepTimer = math.random() * SWEEP_EVERY
 local phaseTimer = 0
 local released   = {}   -- body id -> clock time it was released from its slab
 

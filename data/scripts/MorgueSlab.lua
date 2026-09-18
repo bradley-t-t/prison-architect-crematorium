@@ -9,7 +9,7 @@ local MACHINES    = { "CrematoriumFurnace", "VaporizerPod" }
 local CHECK_EVERY = 10   -- seconds between checks
 local REACH       = 2    -- tiles; a machine this close still owns the slab
 
-local timer = 0
+local timer = math.random() * CHECK_EVERY   -- a random start, so slabs do not all check on one tick
 
 function Create()
 end
