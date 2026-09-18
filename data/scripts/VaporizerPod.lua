@@ -108,11 +108,13 @@ end
 -------------------------------------------------------------------------------
 
 function Sweep()
-    local bodies = IndexBodies()
     local intake, far = Slabs()
     if EnsureIntake(intake) then
         intake, far = Slabs()
     end
+    -- Indexing every body in reach is the dearest thing this script does, so
+    -- it is skipped whenever nothing names a body to look up.
+    local bodies = AnyBodyToFind(intake, far) and IndexBodies() or {}
 
     Reconcile(intake, bodies)
     Reconcile(far, bodies)
@@ -126,6 +128,22 @@ function Sweep()
     end
 
     ReleaseForCarry(intake, far, bodies)
+end
+
+-- True when a slot on this machine or a slab, or the release list, names a
+-- body. Those are the only places the index is ever looked up from.
+function AnyBodyToFind(intake, far)
+    if next(released) ~= nil then return true end
+    for n = 0, NUM_SLOTS - 1 do
+        local id = Get("Slot" .. n .. ".i")
+        if id ~= nil and id > -1 then return true end
+    end
+    for _, slabs in ipairs({ intake, far }) do
+        for _, slab in ipairs(slabs) do
+            if (Get(slab, "Slot0.i") or -1) > -1 then return true end
+        end
+    end
+    return false
 end
 
 -- The body to burn next: one the game put into the furnace itself, else one
