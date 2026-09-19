@@ -25,7 +25,7 @@ local safe = pcall or function(f, ...) return true, f(...) end
 
 local NUM_SLOTS       = 8
 local CHECK_INTERVAL  = 2     -- seconds between phase checks
-local SWEEP_EVERY     = 4     -- seconds between morgue sweeps
+local SWEEP_EVERY     = 8     -- seconds between morgue sweeps
 local BURN_TIME       = 60    -- seconds the furnace burns per body
 local COOL_TIME       = 15    -- seconds before the furnace takes the next body
 local INTAKE_COUNT    = 2     -- hidden slabs per machine
@@ -112,9 +112,9 @@ function Sweep()
     if EnsureIntake(intake) then
         intake, far = Slabs()
     end
-    -- Indexing every body in reach is the dearest thing this script does, so
-    -- it is skipped whenever nothing names a body to look up.
-    local bodies = AnyBodyToFind(intake, far) and IndexBodies() or {}
+    -- Indexing bodies is the dearest thing this script does, so it looks up
+    -- only the bodies something names, and nothing at all when nothing does.
+    local bodies = IndexBodies(WantedBodies(intake, far))
 
     Reconcile(intake, bodies)
     Reconcile(far, bodies)
@@ -130,20 +130,22 @@ function Sweep()
     ReleaseForCarry(intake, far, bodies)
 end
 
--- True when a slot on this machine or a slab, or the release list, names a
--- body. Those are the only places the index is ever looked up from.
-function AnyBodyToFind(intake, far)
-    if next(released) ~= nil then return true end
+-- The ids of every body a slot on this machine, a slab or the release list
+-- names. Those are the only places the index is ever looked up from.
+function WantedBodies(intake, far)
+    local wanted = {}
+    for id in pairs(released) do wanted[id] = true end
     for n = 0, NUM_SLOTS - 1 do
         local id = Get("Slot" .. n .. ".i")
-        if id ~= nil and id > -1 then return true end
+        if id ~= nil and id > -1 then wanted[id] = true end
     end
     for _, slabs in ipairs({ intake, far }) do
         for _, slab in ipairs(slabs) do
-            if (Get(slab, "Slot0.i") or -1) > -1 then return true end
+            local id = Get(slab, "Slot0.i") or -1
+            if id > -1 then wanted[id] = true end
         end
     end
-    return false
+    return wanted
 end
 
 -- The body to burn next: one the game put into the furnace itself, else one
@@ -358,12 +360,55 @@ function ClearOwnSlot(n)
     Set("Slot" .. n .. ".u", -1)
 end
 
--- Every dead entity within reach, keyed by id. One scan per type per sweep.
-function IndexBodies()
+-- The wanted bodies that are within reach, keyed by id.
+--
+-- A search hands back a full script record of everything it finds, which the
+-- game builds afresh every time, so searching every kind of person in a busy
+-- prison costs more than everything else the mod does put together. A body
+-- never changes kind, so the kind each body was found under is remembered and
+-- only those kinds are searched. The rest are searched, in turn and only
+-- until every wanted body has turned up, when a body is new or has gone, and
+-- no more often than FULL_EVERY, so a body that is named but nowhere to be
+-- found cannot bring the whole search back on every sweep.
+local FULL_EVERY = 30
+local kindOf = {}
+local lastFull = -FULL_EVERY
+
+function IndexBodies(wanted)
     local bodies = {}
-    for _, typ in ipairs(ENTITY_TYPES) do
+    if next(wanted) == nil then
+        kindOf = {}
+        return bodies
+    end
+    local searched = {}
+    local function search(typ)
+        searched[typ] = true
         for entity in pairs(Find(typ, BODY_RADIUS)) do
-            if IsCorpse(entity) then bodies[entity.Id.i] = entity end
+            if IsCorpse(entity) then
+                local id = entity.Id.i
+                bodies[id] = entity
+                if wanted[id] then kindOf[id] = typ end
+            end
+        end
+    end
+    local function allFound()
+        for id in pairs(wanted) do
+            if not bodies[id] then return false end
+        end
+        return true
+    end
+    for id in pairs(kindOf) do
+        if not wanted[id] then kindOf[id] = nil end
+    end
+    for id in pairs(wanted) do
+        local typ = kindOf[id]
+        if typ and not searched[typ] then search(typ) end
+    end
+    if not allFound() and clock - lastFull >= FULL_EVERY then
+        lastFull = clock
+        for _, typ in ipairs(ENTITY_TYPES) do
+            if not searched[typ] then search(typ) end
+            if allFound() then break end
         end
     end
     return bodies
