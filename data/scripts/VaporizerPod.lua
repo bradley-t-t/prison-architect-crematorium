@@ -439,9 +439,14 @@ function IndexBodies(wanted)
     end
     local searched = {}
     local full = false
+    -- A body on a slab is within the morgue's reach. Only a body in a guard's
+    -- arms can be farther off, and a search as wide as that hands back most
+    -- of the prison, so it is kept for while one is being carried.
+    local reach = MORGUE_RADIUS + 2
+    if next(released) ~= nil then reach = BODY_RADIUS end
     local function search(typ)
         searched[typ] = true
-        for entity in pairs(Find(typ, BODY_RADIUS)) do
+        for entity in pairs(Find(typ, reach)) do
             if IsCorpse(entity) then
                 local id = entity.Id.i
                 bodies[id] = entity
