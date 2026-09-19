@@ -1,4 +1,4 @@
 Name                 Crematorium
-Author               Trenton
+Author               Knight
 Description          "Adds a Crematorium and a futuristic Vaporizer. Guards carry the dead straight into either machine, from wherever they fell and from nearby morgue slabs, and it disposes of them one at a time. No hearse needed, and none comes while one is standing."
 Version              2.5
