@@ -26,6 +26,7 @@ local safe = pcall or function(f, ...) return true, f(...) end
 local NUM_SLOTS       = 8
 local CHECK_INTERVAL  = 2     -- seconds between phase checks
 local SWEEP_EVERY     = 8     -- seconds between morgue sweeps
+local BUSY_SWEEPS     = 3     -- times as long between sweeps while a body is in the machine
 local BURN_TIME       = 60    -- seconds the furnace burns per body
 local COOL_TIME       = 15    -- seconds before the furnace takes the next body
 local INTAKE_COUNT    = 2     -- hidden slabs per machine
@@ -59,6 +60,7 @@ local ENTITY_TYPES = {
 }
 
 local clock      = 0
+local busy       = false
 local checkTimer = math.random() * CHECK_INTERVAL   -- a random start, so machines do not all work on one tick
 local sweepTimer = math.random() * SWEEP_EVERY
 local phaseTimer = 0
@@ -77,7 +79,13 @@ function Update(timePassed)
     checkTimer = checkTimer + timePassed
     sweepTimer = sweepTimer + timePassed
 
-    if sweepTimer >= SWEEP_EVERY then
+    -- A sweep searches the map for the bodies it is tracking, and that search
+    -- hands back everyone of a body's kind within reach, the living too. A
+    -- machine with a body in it has nothing to choose until it is done, so
+    -- while it burns or cools it sweeps a third as often.
+    local due = SWEEP_EVERY
+    if busy then due = SWEEP_EVERY * BUSY_SWEEPS end
+    if sweepTimer >= due then
         sweepTimer = 0
         local ok, err = safe(Sweep)
         if not ok then Set("LastError", tostring(err)) end
@@ -89,6 +97,7 @@ function Update(timePassed)
     phaseTimer = phaseTimer + dt
 
     local phase = Get("Phase") or "Idle"
+    busy = phase ~= "Idle"
     if phase == "Burning" then
         if phaseTimer >= BURN_TIME then
             this.SubType = 0
