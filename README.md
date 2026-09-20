@@ -26,8 +26,9 @@ game's mod folder, then enable it under Extras, Mods.
 | Path | Holds |
 | :--- | :--- |
 | `manifest.txt` | The name, description and version the mod screen shows |
-| `data/materials.txt` | The Crematorium Furnace, Vaporizer Pod and Morgue Slab objects, the Morgue room, and the game's hearse with scripting switched on |
+| `data/materials.txt` | The Crematorium Furnace, Vaporizer Pod and Morgue Slab objects, the Morgue room, and the game's hearse with scripting switched on. The Morgue Slab itself is not scripted, so a prison full of slabs costs nothing |
 | `data/materials_dlc.txt` | The hearse boat and helicopter with scripting switched on. The game defines them in its own `materials_dlc.txt` and keeps the first definition it reads of a name, reading every mod's copy of a file ahead of its own, so an override has to sit in the file of the same name |
 | `data/scripts/` | One Lua script per scripted object |
+| `data/world.lua` | Removes the hidden slabs a machine spawned once that machine is gone. The game rebuilds its whole script API into Lua on every script call, so this is one call a tick for the prison rather than one per slab |
 | `data/sprites.png` | The sprite sheet |
 | `data/language/base-language.txt` | The names and tooltips the game shows |

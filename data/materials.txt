@@ -101,7 +101,6 @@ BEGIN Object
     ToolbarSprite        MorgueSlabToolbar
     MadeOf               Composite
     Properties           StaticObject
-    Properties           Scripted
     Properties           RoomSpecific 
     Research             Health
 END

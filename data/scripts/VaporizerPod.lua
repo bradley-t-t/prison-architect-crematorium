@@ -30,6 +30,8 @@ local BUSY_SWEEPS     = 3     -- times as long between sweeps while a body is in
 local BURN_TIME       = 60    -- seconds the furnace burns per body
 local COOL_TIME       = 15    -- seconds before the furnace takes the next body
 local INTAKE_COUNT    = 2     -- hidden slabs per machine
+-- The name put on a spawned slab, which data/world.lua sweeps by.
+local INTAKE_MARK     = "CrematoriumIntake"
 -- Where the hidden slabs go, relative to the centre, on the tile grid. A
 -- slab's sprite reaches two tiles up from its position, so they sit on the
 -- bottom row of the footprint to stay under the machine's body. The
@@ -356,13 +358,20 @@ function EnsureIntake(intake)
             changed = true
         else
             Set(slab, "Hidden", true)
+            Set(slab, "Name", INTAKE_MARK)
             kept = kept + 1
         end
     end
     for n = kept + 1, INTAKE_COUNT do
         local offset = offsets[n]
         local slab = Object.Spawn("MorgueSlab", this.Pos.x + offset.x, this.Pos.y + offset.y)
-        if slab then Set(slab, "Hidden", true) end
+        if slab then
+            Set(slab, "Hidden", true)
+            -- The name is how the mod's world script finds this slab again to
+            -- remove it once this machine is gone. A slab the player placed is
+            -- never named, and so is never touched.
+            Set(slab, "Name", INTAKE_MARK)
+        end
         changed = true
     end
     return changed
