@@ -39,12 +39,19 @@ local INTAKE_MARK     = "CrematoriumIntake"
 -- facing east or west.
 local INTAKE_ACROSS   = { { x = -1, y = 1 }, { x = 1, y = 1 } }
 local INTAKE_ALONG    = { { x = -0.5, y = 1.5 }, { x = 0.5, y = 1.5 } }
+local ON_SPOT         = 0.3   -- tiles; a slab this close to an intake spot stands on it
+-- The machines that keep hidden slabs, and how far from one of its own spots
+-- a machine can stand.
+local MACHINE_KINDS   = { "CrematoriumFurnace", "VaporizerPod" }
+local NEIGHBOUR_REACH = 2
 local MORGUE_RADIUS   = 25    -- tiles; slabs this close are fed to the intake
-local BODY_RADIUS     = 60    -- tiles; how far a carried body is tracked
 local RELEASE_TIMEOUT = 600   -- seconds a released body waits for a guard
 local ADOPT_EVERY     = 30    -- seconds between looks for bodies no slot names
 local ADOPT_KINDS     = 5     -- kinds besides prisoners searched on each of those looks
-local FULL_EVERY      = 30    -- seconds between searches of every kind of person
+local ON_SLAB         = 2     -- tiles; a body resting on a slab is this close to it
+local IN_MACHINE      = 2.5   -- tiles; a body inside the machine is this close to its centre
+local IN_FLIGHT_FOR   = 120   -- seconds a released body may be off its slab before it is forgotten
+local SLABS_EVERY     = 60    -- seconds the list of slabs is kept before it is looked for again
 
 -- Every entity type a corpse can be. Dead people keep their living type, so
 -- the only way to find a body is to search each type.
@@ -73,13 +80,14 @@ local released   = {}   -- body id -> clock time it was released from its slab
 local lastAdopt  = -ADOPT_EVERY
 local adoptNext  = 1
 local kindOf     = {}   -- body id -> the kind it was found under
-local lastFull   = -FULL_EVERY
+local slabCache  = nil  -- { intake, far }: the slabs last found, kept between sweeps
+local slabsAge   = SLABS_EVERY
 
 function Create()
     Set("Phase", "Idle")
     Set("Cremated", 0)
     this.SubType = 0
-    EnsureIntake(Slabs())
+    if EnsureIntake(Slabs()) then slabCache = nil end
     UpdateTooltip()
 end
 
@@ -87,6 +95,7 @@ function Update(timePassed)
     clock = clock + timePassed
     checkTimer = checkTimer + timePassed
     sweepTimer = sweepTimer + timePassed
+    slabsAge = slabsAge + timePassed
 
     -- A sweep searches the map for the bodies it is tracking, and that search
     -- hands back everyone of a body's kind within reach, the living too. A
@@ -97,7 +106,10 @@ function Update(timePassed)
     if sweepTimer >= due then
         sweepTimer = 0
         local ok, err = safe(Sweep)
-        if not ok then Set("LastError", tostring(err)) end
+        if not ok then
+            Set("LastError", tostring(err))
+            slabCache = nil     -- a slab taken down since the last look; look again
+        end
     end
 
     if checkTimer < CHECK_INTERVAL then return end
@@ -128,6 +140,7 @@ end
 function Sweep()
     local intake, far = Slabs()
     if EnsureIntake(intake) then
+        slabCache = nil
         intake, far = Slabs()
     end
     if clock - lastAdopt >= ADOPT_EVERY then
@@ -153,21 +166,29 @@ function Sweep()
 end
 
 -- The ids of every body a slot on this machine, a slab or the release list
--- names. Those are the only places the index is ever looked up from.
+-- names, and for each one named by a slot the place it should be lying: the
+-- machine itself, or the slab. Those are the only places the index is ever
+-- looked up from.
 function WantedBodies(intake, far)
-    local wanted = {}
+    local wanted, where = {}, {}
     for id in pairs(released) do wanted[id] = true end
     for n = 0, NUM_SLOTS - 1 do
         local id = Get("Slot" .. n .. ".i")
-        if id ~= nil and id > -1 then wanted[id] = true end
+        if id ~= nil and id > -1 then
+            wanted[id] = true
+            where[id] = { this, IN_MACHINE }
+        end
     end
     for _, slabs in ipairs({ intake, far }) do
         for _, slab in ipairs(slabs) do
             local id = Get(slab, "Slot0.i") or -1
-            if id > -1 then wanted[id] = true end
+            if id > -1 then
+                wanted[id] = true
+                if where[id] == nil then where[id] = { slab, ON_SLAB } end
+            end
         end
     end
-    return wanted
+    return wanted, where
 end
 
 -- The body to burn next: one the game put into the furnace itself, else one
@@ -237,9 +258,11 @@ function ReleaseForCarry(intake, far, bodies)
     for _, slab in ipairs(intake) do
         if (Get(slab, "Slot0.i") or -1) == -1 then capacity = capacity + 1 end
     end
+    -- A released body still on its way takes up a place at the intake whether
+    -- or not this sweep saw it: one in a guard's arms is not looked for.
     for id in pairs(released) do
         local body = bodies[id]
-        if body and not OnIntake(body, intake) then capacity = capacity - 1 end
+        if not (body and OnIntake(body, intake)) then capacity = capacity - 1 end
     end
     for _, slab in ipairs(far) do
         if capacity <= 0 then return end
@@ -315,19 +338,75 @@ end
 -- when it sits within the footprint, which a placed slab never can, so a
 -- neighbouring machine's slabs and the player's slabs are never touched.
 -- Other machines' hidden slabs are left out of the morgue list entirely.
+--
+-- Machines built side by side share an edge, and the row a neighbour keeps
+-- its slabs on can lie along it, inside what reads as this machine's
+-- footprint. A slab on a spot a neighbour keeps one on is the neighbour's.
+-- Were it counted here, each machine would take the other's slabs down on
+-- every sweep and the other would build them again, and anything on its way
+-- to one of them would find it gone.
+--
+-- The list is kept between sweeps, and looked for again as soon as a slab in
+-- it has been taken down.
 function Slabs()
+    if slabCache ~= nil and slabsAge < SLABS_EVERY and AllStanding(slabCache) then
+        return slabCache[1], slabCache[2]
+    end
     local halfW, halfH = HalfFootprint()
     local intake, far = {}, {}
     for slab, dist in pairs(Find("MorgueSlab", MORGUE_RADIUS)) do
-        local dx = math.abs(slab.Pos.x - this.Pos.x)
-        local dy = math.abs(slab.Pos.y - this.Pos.y)
-        if dx <= halfW + 0.1 and dy <= halfH + 0.3 then
-            table.insert(intake, { slab = slab, dist = dist })
-        elseif slab.Hidden ~= true then
-            table.insert(far, { slab = slab, dist = dist })
+        local x, y = tonumber(slab.Pos.x), tonumber(slab.Pos.y)
+        if x ~= nil and y ~= nil then
+            local dx = math.abs(x - this.Pos.x)
+            local dy = math.abs(y - this.Pos.y)
+            if dx <= halfW + 0.1 and dy <= halfH + 0.3 then
+                if OnSpot(this, x, y) or not NeighbourKeeps(slab, x, y) then
+                    table.insert(intake, { slab = slab, dist = dist })
+                end
+            elseif slab.Hidden ~= true then
+                table.insert(far, { slab = slab, dist = dist })
+            end
         end
     end
-    return Sorted(intake), Sorted(far)
+    slabCache = { Sorted(intake), Sorted(far) }
+    slabsAge = 0
+    return slabCache[1], slabCache[2]
+end
+
+-- Whether every slab in the kept list is still standing. One that has been
+-- taken down reads as standing nowhere.
+function AllStanding(cache)
+    for _, slabs in ipairs(cache) do
+        for _, slab in ipairs(slabs) do
+            if tonumber(slab.Pos.x) == nil then return false end
+        end
+    end
+    return true
+end
+
+-- Whether (x, y) is one of the spots a machine keeps its own slabs on.
+function OnSpot(machine, x, y)
+    local mx, my = tonumber(machine.Pos.x), tonumber(machine.Pos.y)
+    if mx == nil or my == nil then return false end
+    for _, offset in ipairs(OffsetsFor(machine)) do
+        if math.abs(x - (mx + offset.x)) <= ON_SPOT and math.abs(y - (my + offset.y)) <= ON_SPOT then
+            return true
+        end
+    end
+    return false
+end
+
+-- Whether another machine keeps a slab where this one stands. Only a slab in
+-- this machine's footprint and off its own spots is asked about, which is
+-- none at all unless machines stand side by side.
+function NeighbourKeeps(slab, x, y)
+    for _, kind in ipairs(MACHINE_KINDS) do
+        for machine in pairs(Find(slab, kind, NEIGHBOUR_REACH) or {}) do
+            local id = machine.Id
+            if id and id.i ~= this.Id.i and OnSpot(machine, x, y) then return true end
+        end
+    end
+    return false
 end
 
 function Sorted(entries)
@@ -377,13 +456,17 @@ function EnsureIntake(intake)
     return changed
 end
 
--- The machine turned east or west has its long side running north-south.
-function IntakeOffsets()
-    local orientation = this.Or
+-- A machine turned east or west has its long side running north-south.
+function OffsetsFor(machine)
+    local orientation = machine.Or
     if orientation and orientation.x and math.abs(orientation.x) > 0.5 then
         return INTAKE_ALONG
     end
     return INTAKE_ACROSS
+end
+
+function IntakeOffsets()
+    return OffsetsFor(this)
 end
 
 function ClearSlab(slab)
@@ -398,64 +481,78 @@ end
 
 -- A body lying on a slab is tied to it from the body's side, by its carrier.
 -- Where the slab's own slot names nobody the body is invisible to every sweep,
--- so every ADOPT_EVERY the machine looks for bodies lying on its slabs and
--- writes each one back into its slab's slot. Nearly every body is a prisoner,
--- so prisoners are searched on every look and the other kinds a few at a time.
+-- so every ADOPT_EVERY the machine looks on each slab that names nobody for a
+-- body lying there and writes it back into the slab's slot. The look is made
+-- on the slab and nowhere else, so it hands back whoever is on the slab rather
+-- than everyone in the morgue. Nearly every body is a prisoner, so prisoners
+-- are looked for on every round and the other kinds a few at a time.
+--
+-- A slab holds only the dead by rights, and anybody alive it holds cannot
+-- move until something lets go, so the look lets up whoever alive it finds
+-- held down there.
 function Adopt(intake, far)
-    local slabById = {}
-    for _, slabs in ipairs({ intake, far }) do
-        for _, slab in ipairs(slabs) do slabById[slab.Id.i] = slab end
-    end
-    if next(slabById) == nil then return end
     local kinds = { ENTITY_TYPES[1] }
     for _ = 1, ADOPT_KINDS do
         adoptNext = adoptNext % #ENTITY_TYPES + 1
         if adoptNext ~= 1 then table.insert(kinds, ENTITY_TYPES[adoptNext]) end
     end
+    for _, slabs in ipairs({ intake, far }) do
+        for _, slab in ipairs(slabs) do
+            if (Get(slab, "Slot0.i") or -1) == -1 then
+                AdoptOnto(slab, kinds)
+            end
+        end
+    end
+end
+
+function AdoptOnto(slab, kinds)
     for _, typ in ipairs(kinds) do
-        for entity in pairs(Find(typ, MORGUE_RADIUS + 2)) do
-            if IsCorpse(entity) and IsLoaded(entity) then
-                local slab = slabById[CarrierOf(entity)]
-                local id = entity.Id
-                if slab and id.u ~= nil and (Get(slab, "Slot0.i") or -1) == -1 then
+        for entity in pairs(Find(slab, typ, ON_SLAB) or {}) do
+            local id = entity.Id
+            if id and IsLoaded(entity) and CarrierOf(entity) == slab.Id.i then
+                if not IsCorpse(entity) then
+                    Set(entity, "Loaded", false)
+                    Set(entity, "CarrierId.i", -1)
+                    Set(entity, "CarrierId.u", -1)
+                elseif id.u ~= nil then
                     Set(slab, "Slot0.i", id.i)
                     Set(slab, "Slot0.u", id.u)
                     kindOf[id.i] = typ
+                    return
                 end
             end
         end
     end
 end
 
--- The wanted bodies that are within reach, keyed by id, and a function that
--- says whether a wanted body is gone. A body that did not turn up is gone
--- only when its kind was searched on this sweep; one whose kind is not yet
--- known, on a sweep with no full search, was simply not looked for.
+-- The wanted bodies, keyed by id, and a function that says whether a wanted
+-- body is gone.
 --
 -- A search hands back a full script record of everything it finds, which the
--- game builds afresh every time, so searching every kind of person in a busy
--- prison costs more than everything else the mod does put together. A body
--- never changes kind, so the kind each body was found under is remembered and
--- only those kinds are searched. The rest are searched, in turn and only
--- until every wanted body has turned up, when a body is new or has gone, and
--- no more often than FULL_EVERY, so a body that is named but nowhere to be
--- found cannot bring the whole search back on every sweep.
-function IndexBodies(wanted)
+-- game builds afresh every time, and a search of the morgue or wider hands
+-- back most of the prison with it. So each body is looked for where its slot
+-- says it lies, on its slab or in the machine, and only there: a search a
+-- couple of tiles across that hands back the body and whoever is standing on
+-- it. The kind each body was found under is remembered, and a body whose kind
+-- is not yet known is looked for as each kind in turn, still only where it
+-- should be lying.
+--
+-- A body that was looked for where it should be and was not there is gone.
+-- A released body that no slot names any more is in a guard's arms, and is not
+-- looked for at all: it turns up again on whichever slab the guard puts it
+-- on, and it is forgotten once it has been off its slab for IN_FLIGHT_FOR.
+function IndexBodies(wanted, where)
     local bodies = {}
     if next(wanted) == nil then
         kindOf = {}
         return bodies, function() return false end
     end
-    local searched = {}
-    local full = false
-    -- A body on a slab is within the morgue's reach. Only a body in a guard's
-    -- arms can be farther off, and a search as wide as that hands back most
-    -- of the prison, so it is kept for while one is being carried.
-    local reach = MORGUE_RADIUS + 2
-    if next(released) ~= nil then reach = BODY_RADIUS end
-    local function search(typ)
-        searched[typ] = true
-        for entity in pairs(Find(typ, reach)) do
+    for id in pairs(kindOf) do
+        if not wanted[id] then kindOf[id] = nil end
+    end
+    local looked = {}
+    local function lookAt(place, typ)
+        for entity in pairs(Find(place[1], typ, place[2]) or {}) do
             if IsCorpse(entity) then
                 local id = entity.Id.i
                 bodies[id] = entity
@@ -463,40 +560,36 @@ function IndexBodies(wanted)
             end
         end
     end
-    local function allFound()
-        for id in pairs(wanted) do
-            if not bodies[id] then return false end
-        end
-        return true
-    end
-    for id in pairs(kindOf) do
-        if not wanted[id] then kindOf[id] = nil end
-    end
-    for id in pairs(wanted) do
-        local typ = kindOf[id]
-        if typ and not searched[typ] then search(typ) end
-    end
-    if not allFound() and clock - lastFull >= FULL_EVERY then
-        lastFull = clock
-        full = true
-        for _, typ in ipairs(ENTITY_TYPES) do
-            if not searched[typ] then search(typ) end
-            if allFound() then break end
+    for id, place in pairs(where) do
+        if not bodies[id] then
+            local known = kindOf[id]
+            if known then lookAt(place, known) end
+            if not bodies[id] then
+                for _, typ in ipairs(ENTITY_TYPES) do
+                    if typ ~= known then
+                        lookAt(place, typ)
+                        if bodies[id] then break end
+                    end
+                end
+            end
+            looked[id] = true
         end
     end
     local function gone(id)
         if bodies[id] then return false end
-        local typ = kindOf[id]
-        return full or (typ ~= nil and searched[typ] == true)
+        if looked[id] then return true end
+        local since = released[id]
+        return since ~= nil and clock - since > IN_FLIGHT_FOR
     end
     return bodies, gone
 end
 
--- A dead entity keeps its type but gains a cause of death and full damage.
+-- A body is a person whose Damage has reached 1. That is the only test: the
+-- game hands a script a DeathType for the living as well as the dead, so
+-- reading one says nothing about whether anybody has died, and a machine
+-- that believed it would burn whoever it was handed.
 function IsCorpse(entity)
-    local cause = entity.DeathType
-    if cause ~= nil and cause ~= "" and cause ~= "None" then return true end
-    local damage = entity.Damage
+    local damage = tonumber(entity.Damage)
     return damage ~= nil and damage >= 1
 end
 
@@ -528,8 +621,8 @@ end
 -- the object's type and id, and never takes one back, so a script that
 -- searches holds on to everyone it has ever found. Every FORGET_EVERY seconds
 -- those globals are cleared, and Lua's own collector frees what they held.
--- Reading a property of an object goes through its global, so this is only
--- for a script that keeps no object from one update to the next.
+-- Reading a property of an object goes through its global, so the slabs this
+-- machine keeps between sweeps keep theirs.
 local FORGET_EVERY = 20
 local forgetTimer = math.random() * FORGET_EVERY
 local runUpdate = Update
@@ -539,7 +632,8 @@ function Update(timePassed)
         forgetTimer = 0
         if _G ~= nil then
             for name, value in pairs(_G) do
-                if type(value) == "table" and type(name) == "string" and name:find("i%-?%d+u%-?%d+$") then
+                if type(value) == "table" and type(name) == "string" and name:find("i%-?%d+u%-?%d+$")
+                    and not name:find("^MorgueSlab") then
                     _G[name] = nil
                 end
             end

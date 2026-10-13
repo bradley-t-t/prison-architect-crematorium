@@ -11,6 +11,13 @@ moment it appears at the edge of the map. The same goes for the hearse boat and
 helicopter on island maps. A hearse already carrying bodies finishes its run,
 and with no machine in the prison the hearse works as it always did.
 
+Machines can stand side by side. Each keeps its hidden slabs on its own spots
+and leaves alone a slab lying on a neighbour's, so two machines that touch
+never take down and rebuild each other's slabs.
+
+A slab holds only the dead. Anybody alive a machine finds held down on one of
+its slabs, or on a Morgue Slab it looks after, is let up where they lie.
+
 ## Install
 
 Copy the contents of this repository into a folder named `Crematorium` in the
